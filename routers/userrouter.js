@@ -62,4 +62,18 @@ router.get("/api/suggestion", async (req, res) => {
   }
 });
 
+router.get("/api/getTodosByLoweredSN", async (req, res) => {
+  try {
+    const loweredSN = req.query.loweredSN; // ?loweredSN=1001
+    if (!loweredSN) {
+      return res.status(400).json({ error: "LoweredSN is required" });
+    }
+
+    const todos = await Todo.find({ LoweredSN: loweredSN });
+    res.status(200).json(todos);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 module.exports = router;
