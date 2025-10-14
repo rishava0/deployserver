@@ -4,6 +4,10 @@ const { createTodo } = require('../controller/todoController');
 const UserController = require('../controller/user_controller');
 const Todo = require('../model/todoModel');
 
+const XLSX = require("xlsx");
+const fs = require("fs");
+
+
 const categories=[
 {name:'All'},
 {name:'PAPIS'},
@@ -69,11 +73,65 @@ router.get("/api/getTodosByLoweredSN", async (req, res) => {
       return res.status(400).json({ error: "LoweredSN is required" });
     }
 
-    const todos = await Todo.find({ LoweredSN: loweredSN });
+    const todos = await Todo.find({$or:[{ LoweredSN: loweredSN },{FittedSN: loweredSN}]});
     res.status(200).json(todos);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
+router.get("/api/downloadExcel", async (req, res) => {
+
+ const news = await Todo.find().lean();
+  
+      // Convert JSON → Excel workbook
+  const worksheet = XLSX.utils.json_to_sheet(news);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+
+  // Save Excel to temp file
+  const filePath = "./data.xlsx";
+  XLSX.writeFile(workbook, filePath);
+
+  // Send file as download
+  res.download(filePath, "data.xlsx", (err) => {
+    if (err) {
+      console.error("Error sending file:", err);
+    }
+    fs.unlinkSync(filePath); // delete temp file
+  });
+});
+
+router.get('/api/search', async (req, res) => {
+  const { query } = req.query; // the search text
+  if (!query) {
+    return res.status(400).json({ success: false, message: "Query parameter is required" });
+  }
+
+  try {
+    const results = await Todo.find({
+      $or: [
+        { Item: { $regex: query, $options: "i" } },
+        { SubItem: { $regex: query, $options: "i" } },
+        { Rake_No: { $regex: query, $options: "i" } },
+        { Coach_No: { $regex: query, $options: "i" } },
+        { LoweredSN: { $regex: query, $options: "i" } },
+        { FittedSN: { $regex: query, $options: "i" } },
+        { NatureOfProblem: { $regex: query, $options: "i" } },
+      ]
+    }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: results,
+      total: results.length
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+
 module.exports = router;
