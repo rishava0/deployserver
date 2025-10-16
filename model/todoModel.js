@@ -9,24 +9,31 @@ const todoSchema = new mongoose.Schema({
     },
     Item: {
         type: String,
+        required: true,
     },
         SubItem: {
         type: String,
+        required: true,
     },
     Rake_No: {
         type: String,
+        required: true,
     },
     Coach_No: {
         type: String,
+        required: true,
     }, 
     LoweredSN: {
        type: String,
+       required: true,
     }, 
     FittedSN: {
         type: String,
+        required: true,
     }, 
      NatureOfProblem: {
         type: String,
+        required: true,
     }, 
 },{timestamps:true});
 
