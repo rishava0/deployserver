@@ -4,8 +4,8 @@ const { Schema } = mongoose;
 
 const todoSchema = new mongoose.Schema({
     userId: {
-        //type: Schema.Types.ObjectId, 
-        type: String,
+      type: Schema.Types.ObjectId, 
+        //type: String,
         ref:UserModel.modelName,
     },
     Item: {

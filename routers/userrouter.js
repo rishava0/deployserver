@@ -26,7 +26,7 @@ router.post('/api/', authMiddleware,async (req, res) =>{
 
 try{
     const todo = new Todo({
-      userId: req.user.email,
+      userId: req.user._id, 
       Item: req.body.Item,
       SubItem: req.body.SubItem,
       Rake_No: req.body.Rake_No,
