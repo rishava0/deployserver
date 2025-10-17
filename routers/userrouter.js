@@ -23,10 +23,13 @@ const categories=[
 //router.post('/api/',createTodo);
 
 router.post('/api/', authMiddleware,async (req, res) =>{
-
 try{
+   if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: "Unauthorized: User info missing" });
+    }
     const todo = new Todo({
-      userId: req.user._id, 
+      userId: req.user._id,
+      mail:req.user.email,
       Item: req.body.Item,
       SubItem: req.body.SubItem,
       Rake_No: req.body.Rake_No,
@@ -97,7 +100,7 @@ router.get("/api/getTodosByLoweredSN", async (req, res) => {
       return res.status(400).json({ error: "LoweredSN is required" });
     }
 
-    const todos = await Todo.find({$or:[{ LoweredSN: loweredSN },{FittedSN: loweredSN}]}).populate('userId', 'email');
+    const todos = await Todo.find({$or:[{ LoweredSN: loweredSN },{FittedSN: loweredSN}]}) //.populate('userId', 'email');
     res.status(200).json(todos);
   } catch (err) {
     console.error(err);

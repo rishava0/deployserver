@@ -4,9 +4,11 @@ const { Schema } = mongoose;
 
 const todoSchema = new mongoose.Schema({
     userId: {
-      type: Schema.Types.ObjectId, 
-        //type: String,
+      type: Schema.Types.ObjectId,  //type: String,Schema.Types.ObjectId
         ref:UserModel.modelName,
+    },
+      mail: {
+      type: String,
     },
     Item: {
         type: String,
