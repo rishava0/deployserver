@@ -48,6 +48,7 @@ try{
 
 
 router.post('/api/login',UserController.login);
+router.post("/api/updatePassword", UserController.updatePassword);
 
 router.get('/', (req, res)=>{
     res.send('Welcome to Electronics Section work')
@@ -179,6 +180,21 @@ router.get('/api/search', async (req, res) => {
   }
 });
 
+router.delete('/api/deleteTodo/:id', async (req, res) => {
+  const { id } = req.params;
 
+  try {
+    const deletedTodo = await Todo.findByIdAndDelete(id);
+
+    if (!deletedTodo) {
+      return res.status(404).json({ status: false, message: 'Todo not found' });
+    }
+
+    res.status(200).json({ status: true, message: 'Todo deleted successfully' });
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({ status: false, message: 'Internal server error' });
+  }
+});
 
 module.exports = router;
