@@ -132,40 +132,49 @@ router.get("/api/downloadExcel", async (req, res) => {
 });
 
 router.get('/api/search', async (req, res) => {
-  const { query } = req.query; // the search text
-  if (!query) {
-    return res.status(400).json({ success: false, message: "Query parameter is required" });
-  }
-
   try {
-    let searchFilter;
+    const { query, rakeNo, coachNo, item, subItem, startDate, endDate } = req.query;
 
-    // Detect keyword prefixes
-     if (query.startsWith("CN:")) {
-      const value = query.replace("CN:", "").trim();
-      searchFilter = { Coach_No: { $regex: value, $options: "i" } };
-    } else if (query.startsWith("LOW:")) {
-      const value = query.replace("LOW:", "").trim();
-      searchFilter = { LoweredSN: { $regex: value, $options: "i" } };
-    } else if (query.startsWith("FIT:")) {
-      const value = query.replace("FIT:", "").trim();
-      searchFilter = { FittedSN: { $regex: value, $options: "i" } };
-    } else if (query.startsWith("RN:")) {
-      const value = query.replace("RN:", "").trim();
-      searchFilter = { Rake_No: { $regex: value, $options: "i" } };
+    let searchFilter = {};
+
+    // Prefix-based search for single query
+    if (query) {
+      if (query.startsWith("CN:")) {
+        const value = query.replace("CN:", "").trim();
+        searchFilter = { Coach_No: { $regex: value, $options: "i" } };
+      } else if (query.startsWith("LOW:")) {
+        const value = query.replace("LOW:", "").trim();
+        searchFilter = { LoweredSN: { $regex: value, $options: "i" } };
+      } else if (query.startsWith("FIT:")) {
+        const value = query.replace("FIT:", "").trim();
+        searchFilter = { FittedSN: { $regex: value, $options: "i" } };
+      } else if (query.startsWith("RN:")) {
+        const value = query.replace("RN:", "").trim();
+        searchFilter = { Rake_No: { $regex: value, $options: "i" } };
+      } else {
+        searchFilter = {
+          $or: [
+            { Item: { $regex: query, $options: "i" } },
+            { SubItem: { $regex: query, $options: "i" } },
+            { Rake_No: { $regex: query, $options: "i" } },
+            { Coach_No: { $regex: query, $options: "i" } },
+            { LoweredSN: { $regex: query, $options: "i" } },
+            { FittedSN: { $regex: query, $options: "i" } },
+            { NatureOfProblem: { $regex: query, $options: "i" } },
+          ],
+        };
+      }
     } else {
-      // Default: search in all fields
-      searchFilter = {
-        $or: [
-          { Item: { $regex: query, $options: "i" } },
-          { SubItem: { $regex: query, $options: "i" } },
-          { Rake_No: { $regex: query, $options: "i" } },
-          { Coach_No: { $regex: query, $options: "i" } },
-          { LoweredSN: { $regex: query, $options: "i" } },
-          { FittedSN: { $regex: query, $options: "i" } },
-          { NatureOfProblem: { $regex: query, $options: "i" } },
-        ]
-      };
+      // Advanced search filters
+      if (rakeNo) searchFilter.Rake_No = { $regex: rakeNo, $options: "i" };
+      if (coachNo) searchFilter.Coach_No = { $regex: coachNo, $options: "i" };
+      if (item) searchFilter.Item = { $regex: item, $options: "i" };
+      if (subItem) searchFilter.SubItem = { $regex: subItem, $options: "i" };
+      if (startDate || endDate) {
+        searchFilter.createdAt = {};
+        if (startDate) searchFilter.createdAt.$gte = new Date(startDate);
+        if (endDate) searchFilter.createdAt.$lte = new Date(endDate);
+      }
     }
 
     const results = await Todo.find(searchFilter).sort({ createdAt: -1 });
@@ -176,9 +185,11 @@ router.get('/api/search', async (req, res) => {
       total: results.length,
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 router.delete('/api/deleteTodo/:id', async (req, res) => {
   const { id } = req.params;
