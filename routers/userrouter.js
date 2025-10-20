@@ -1,4 +1,5 @@
 const router = require ('express').Router();
+const moment = require('moment');
 const SuggestionService = require("../services/suggestion.service")
 const { createTodo } = require('../controller/todoController');
 const UserController = require('../controller/user_controller');
@@ -172,8 +173,17 @@ router.get('/api/search', async (req, res) => {
       if (subItem) searchFilter.SubItem = { $regex: subItem, $options: "i" };
       if (startDate || endDate) {
         searchFilter.createdAt = {};
-        if (startDate) searchFilter.createdAt.$gte = new Date(startDate);
-        if (endDate) searchFilter.createdAt.$lte = new Date(endDate);
+    if (startDate) {
+      const start = moment(startDate, 'YYYY-MM-DD').startOf('day').toDate();
+      searchFilter.createdAt = { ...searchFilter.createdAt, $gte: start };
+    }
+    if (endDate) {
+      const end = moment(endDate, 'YYYY-MM-DD').endOf('day').toDate();
+      searchFilter.createdAt = { ...searchFilter.createdAt, $lte: end };
+    }
+
+        //if (startDate) searchFilter.createdAt.$gte = new Date(startDate);
+       // if (endDate) searchFilter.createdAt.$lte = new Date(endDate);
       }
     }
 
@@ -207,5 +217,210 @@ router.delete('/api/deleteTodo/:id', async (req, res) => {
     res.status(500).json({ status: false, message: 'Internal server error' });
   }
 });
+
+router.get('/api/unitStatus', async (req, res) => {
+  try {
+    // Fetch all entries sorted by creation time
+    const todos = await Todo.find().sort({ createdAt: 1 });
+
+    const newItems = [];
+    const repairedItems = [];
+    const defectiveItems = [];
+
+    for (const t of todos) {
+      const LoweredSN = t.LoweredSN;
+      const FittedSN = t.FittedSN;
+
+      // ---------- NEW ----------
+  if (LoweredSN && FittedSN && LoweredSN === FittedSN && t.Coach_No === 'NEW ISSUE') {
+  // Check if any previous entry has this LoweredSN or FittedSN
+  const hasEarlier = todos.some(
+    (x) =>
+      x.createdAt < t.createdAt &&
+      (x.LoweredSN === LoweredSN || x.FittedSN === LoweredSN)
+  );
+
+  // Check if any later entry has this LoweredSN or FittedSN
+  const hasLater = todos.some(
+    (x) =>
+      x.createdAt > t.createdAt &&
+      (x.LoweredSN === LoweredSN || x.FittedSN === LoweredSN)
+  );
+
+  if (!hasEarlier && !hasLater) {
+    newItems.push({
+      Item: t.Item,
+      SubItem: t.SubItem,
+      LoweredSN,
+      FittedSN,
+      Coach_No: t.Coach_No,
+    });
+  }
+}
+
+      // ---------- REPAIRED ----------
+      else if (LoweredSN && FittedSN && LoweredSN === FittedSN && t.Coach_No === 'REPAIRED') {
+        const hasLater = todos.some(
+          (x) =>
+            (x.LoweredSN === LoweredSN || x.FittedSN === LoweredSN) &&
+            x.createdAt > t.createdAt
+        );
+        if (!hasLater) {
+          repairedItems.push({
+            Item: t.Item,
+            SubItem: t.SubItem,
+            LoweredSN,
+            FittedSN,
+            Coach_No: t.Coach_No,
+          });
+        }
+      }
+
+      // ---------- DEFECTIVE ----------
+      else if (LoweredSN) {
+        // Check if this serial is not later NEW ISSUE or REPAIRED
+        const hasLaterNewOrRepaired = todos.some(
+          (x) =>
+            x.createdAt > t.createdAt &&
+            x.LoweredSN === LoweredSN &&
+            ((x.FittedSN === x.LoweredSN && x.Coach_No === 'NEW ISSUE') ||
+             (x.FittedSN === x.LoweredSN && x.Coach_No === 'REPAIRED'))
+        );
+
+        // Also check if there is a later fitting
+        const hasFittedLater = todos.some(
+          (x) =>
+            x.createdAt > t.createdAt &&
+            x.FittedSN === LoweredSN
+        );
+
+        if (!hasLaterNewOrRepaired && !hasFittedLater) {
+          defectiveItems.push({
+            Item: t.Item,
+            SubItem: t.SubItem,
+            LoweredSN,
+            Coach_No: t.Coach_No,
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        new: newItems,
+        repaired: repairedItems,
+        defective: defectiveItems,
+      },
+    });
+  } catch (error) {
+    console.error('Error in /unitStatus:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+// routes/advancedSearch.js
+router.get('/api/unitStatusSummary', async (req, res) => {
+  try {
+    const todos = await Todo.find().sort({ createdAt: 1 });
+
+    const summaryMap = {}; // { SubItem: { new: [], repaired: [], defective: [] } }
+
+    for (const t of todos) {
+      const LoweredSN = t.LoweredSN;
+      const FittedSN = t.FittedSN;
+      const sub = t.SubItem;
+
+      if (!summaryMap[sub]) summaryMap[sub] = { new: [], repaired: [], defective: [] };
+
+      // NEW
+      if (LoweredSN && FittedSN && LoweredSN === FittedSN && t.Coach_No === 'NEW ISSUE') {
+        const hasEarlier = todos.some(x => x.createdAt < t.createdAt && (x.LoweredSN === LoweredSN || x.FittedSN === LoweredSN));
+        const hasLater = todos.some(x => x.createdAt > t.createdAt && (x.LoweredSN === LoweredSN || x.FittedSN === LoweredSN));
+        if (!hasEarlier && !hasLater) summaryMap[sub].new.push(LoweredSN);
+      }
+
+      // REPAIRED
+      else if (LoweredSN && FittedSN && LoweredSN === FittedSN && t.Coach_No === 'REPAIRED') {
+        const hasLater = todos.some(x => (x.LoweredSN === LoweredSN || x.FittedSN === LoweredSN) && x.createdAt > t.createdAt);
+        if (!hasLater) summaryMap[sub].repaired.push(LoweredSN);
+      }
+
+      // DEFECTIVE
+      else if (LoweredSN) {
+        const hasLaterNewOrRepaired = todos.some(
+          x => x.createdAt > t.createdAt &&
+               x.LoweredSN === LoweredSN &&
+               ((x.FittedSN === x.LoweredSN && (x.Coach_No === 'NEW ISSUE' || x.Coach_No === 'REPAIRED')))
+        );
+        const hasFittedLater = todos.some(x => x.createdAt > t.createdAt && x.FittedSN === LoweredSN);
+        if (!hasLaterNewOrRepaired && !hasFittedLater) summaryMap[sub].defective.push(LoweredSN);
+      }
+    }
+
+    // Prepare response with counts
+    const response = Object.entries(summaryMap).map(([subItem, lists]) => ({
+      SubItem: subItem,
+      counts: {
+        new: lists.new.length,
+        repaired: lists.repaired.length,
+        defective: lists.defective.length,
+      },
+      LoweredSNs: lists // keep arrays if needed later
+    }));
+
+    res.json({ success: true, data: response });
+
+  } catch (error) {
+    console.error('Error in /unitStatusSummary:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Example route: /api/unitStatusCount
+router.get('/api/unitStatusCount', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, message: "Provide startDate and endDate in YYYY-MM-DD format" });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999); // include entire end day
+
+    const counts = await Todo.aggregate([
+      {
+        $match: {
+          Coach_No: { $nin: ["NEW ISSUE", "REPAIRED"] },
+          createdAt: { $gte: start, $lte: end }
+        }
+      },
+      {
+        $group: {
+          _id: "$SubItem",
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          SubItem: "$_id",
+          count: 1
+        }
+      }
+    ]);
+
+    res.json({ success: true, data: counts });
+  } catch (error) {
+    console.error("Error in /unitStatusCount:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+
 
 module.exports = router;
