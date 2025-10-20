@@ -102,7 +102,10 @@ router.get("/api/getTodosByLoweredSN", async (req, res) => {
       return res.status(400).json({ error: "LoweredSN is required" });
     }
 
-    const todos = await Todo.find({$or:[{ LoweredSN: loweredSN },{FittedSN: loweredSN}]}) //.populate('userId', 'email');
+    const todos = await Todo.find({$or:[{ LoweredSN: loweredSN },{FittedSN: loweredSN}]}).sort({ createdAt: -1 }); //.populate('userId', 'email');
+        if (todos.length === 0) {
+      return res.status(404).json({ message: "No records found" });
+    }
     res.status(200).json(todos);
   } catch (err) {
     console.error(err);
