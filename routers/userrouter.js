@@ -382,7 +382,7 @@ router.get('/api/unitStatusSummary', async (req, res) => {
 });
 
 // Example route: /api/unitStatusCount
-router.get('/api/unitStatusCount', async (req, res) => {
+router.get('/api/unitStatusCount1', async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
@@ -422,6 +422,164 @@ router.get('/api/unitStatusCount', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+router.get('/api/unitStatusCount', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Provide startDate and endDate in YYYY-MM-DD format" 
+      });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start) || isNaN(end)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid date format. Use YYYY-MM-DD." 
+      });
+    }
+    end.setHours(23, 59, 59, 999);
+
+    const summary = await Todo.aggregate([
+      {
+        $facet: {
+          // 1️⃣ Lifetime total NEW counts
+          totalNew: [
+            { $match: { Coach_No: "NEW ISSUE" } },
+            { $group: { _id: "$SubItem", totalNewCount: { $sum: 1 } } }
+          ],
+
+          // 2️⃣ New Used count in selected range
+          newUsedInRange: [
+            {
+              $match: { Coach_No: "NEW ISSUE", createdAt: { $gte: start, $lte: end } }
+            },
+            {
+              $lookup: {
+                from: "todos",
+                let: { lowered: "$LoweredSN", fitted: "$FittedSN", selfId: "$_id" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $ne: ["$_id", "$$selfId"] },
+                          { $or: [
+                              { $eq: ["$LoweredSN", "$$lowered"] },
+                              { $eq: ["$FittedSN", "$$fitted"] }
+                            ] 
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ],
+                as: "history"
+              }
+            },
+            { $match: { history: { $ne: [] } } },
+            { $group: { _id: "$SubItem", newUsedCount: { $sum: 1 } } }
+          ],
+
+          // 3️⃣ Repaired Used count in selected range
+          repairedUsedInRange: [
+            {
+              $match: { Coach_No: "REPAIRED", createdAt: { $gte: start, $lte: end } }
+            },
+            {
+              $lookup: {
+                from: "todos",
+                let: { lowered: "$LoweredSN", fitted: "$FittedSN", repairedDate: "$createdAt" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $gt: ["$createdAt", "$$repairedDate"] },
+                          { $or: [
+                              { $eq: ["$LoweredSN", "$$lowered"] },
+                              { $eq: ["$FittedSN", "$$fitted"] }
+                            ] 
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  { $sort: { createdAt: 1 } },
+                  { $limit: 1 } // only immediate entry after repair
+                ],
+                as: "nextEntry"
+              }
+            },
+            { $match: { nextEntry: { $ne: [] } } },
+            { $group: { _id: "$SubItem", repairedUsedCount: { $sum: 1 } } }
+          ],
+
+          // 4️⃣ Failure count in selected range
+          failedInRange: [
+            {
+              $match: { 
+                Coach_No: { $nin: ["NEW ISSUE", "REPAIRED"] },
+                createdAt: { $gte: start, $lte: end } 
+              }
+            },
+            { $group: { _id: "$SubItem", failureCount: { $sum: 1 } } }
+          ]
+        }
+      },
+
+      // Combine all four facets
+      {
+        $project: {
+          combined: {
+            $setUnion: [
+              "$totalNew",
+              "$newUsedInRange",
+              "$repairedUsedInRange",
+              "$failedInRange"
+            ]
+          }
+        }
+      },
+      { $unwind: "$combined" },
+      { $replaceRoot: { newRoot: "$combined" } },
+
+      // Merge counts by SubItem
+      {
+        $group: {
+          _id: "$_id",
+          totalNewCount: { $sum: "$totalNewCount" },
+          newUsedCount: { $sum: "$newUsedCount" },
+          repairedUsedCount: { $sum: "$repairedUsedCount" },
+          failureCount: { $sum: "$failureCount" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          SubItem: "$_id",
+          totalNewCount: { $ifNull: ["$totalNewCount", 0] },
+          newUsedCount: { $ifNull: ["$newUsedCount", 0] },
+          repairedUsedCount: { $ifNull: ["$repairedUsedCount", 0] },
+          failureCount: { $ifNull: ["$failureCount", 0] }
+        }
+      },
+      { $sort: { SubItem: 1 } }
+    ]);
+
+    res.json({ success: true, data: summary });
+
+  } catch (error) {
+    console.error("Error in /unitStatusCount:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
 
 
 
