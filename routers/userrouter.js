@@ -95,7 +95,7 @@ router.get("/api/suggestion", async (req, res) => {
   }
 });
 
-router.get("/api/getTodosByLoweredSN", async (req, res) => {
+router.get("/api/getTodosByLoweredSN1", async (req, res) => {
   try {
     const loweredSN = req.query.loweredSN; // ?loweredSN=1001
     if (!loweredSN) {
@@ -112,6 +112,35 @@ router.get("/api/getTodosByLoweredSN", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+router.get("/api/getTodosByLoweredSN", async (req, res) => {
+  try {
+    const { item, subitem, loweredSN } = req.query; // ?item=PAPIS&subitem=CCIMS&loweredSN=1234
+
+    if (!item || !subitem || !loweredSN) {
+      return res
+        .status(400)
+        .json({ error: "Item, SubItem, and LoweredSN are required" });
+    }
+
+    // Find all records with same Item/SubItem and matching serial number (Lowered or Fitted)
+    const todos = await Todo.find({
+      Item: item,
+      SubItem: subitem,
+      $or: [{ LoweredSN: loweredSN }, { FittedSN: loweredSN }],
+    }).sort({ createdAt: -1 });
+
+    if (todos.length === 0) {
+      return res.status(404).json({ message: "No records found" });
+    }
+
+    res.status(200).json(todos);
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 router.get("/api/downloadExcel", async (req, res) => {
 
