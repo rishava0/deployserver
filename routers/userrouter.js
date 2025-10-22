@@ -96,7 +96,12 @@ router.get("/api/news", async (req, res) => {
 
     // ✅ Aggregate pipeline to get only the latest record per LoweredSN
     const pipeline = [
-      { $match: query },
+         {
+        $match: {
+          ...query,
+          Coach_No: { $nin: ["NEW ISSUE", "REPAIRED"] }, // Exclude these
+        },
+         },
       { $sort: { createdAt: -1 } }, // Sort newest first
       {
         $group: {
