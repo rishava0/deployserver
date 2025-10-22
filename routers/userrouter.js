@@ -62,7 +62,7 @@ router.get('/api/categories', (req, res)=>{
     })
     });
 
-router.get('/api/news', async(req, res)=> {
+router.get('/api/news1', async(req, res)=> {
 const {page =1, limit =25, Item} = req.query;
 const query={};
 if (Item) query.Item= Item;
@@ -83,6 +83,55 @@ try{
         res.status(500).json({success: false, message:error.message});
     }
 });
+
+router.get("/api/news", async (req, res) => {
+  try {
+    const { page = 1, limit = 25, Item } = req.query;
+
+    const query = {};
+    if (Item) query.Item = Item;
+
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    // ✅ Aggregate pipeline to get only the latest record per LoweredSN
+    const pipeline = [
+      { $match: query },
+      { $sort: { createdAt: -1 } }, // Sort newest first
+      {
+        $group: {
+          _id: "$LoweredSN",
+          latestRecord: { $first: "$$ROOT" }, // Take most recent document
+        },
+      },
+      { $replaceRoot: { newRoot: "$latestRecord" } }, // Flatten output
+      { $sort: { createdAt: -1 } }, // Sort again for response consistency
+      { $skip: (pageNum - 1) * limitNum },
+      { $limit: limitNum },
+    ];
+
+    const news = await Todo.aggregate(pipeline);
+
+    // Count total unique LoweredSNs for pagination
+    const total = await Todo.distinct("LoweredSN", query);
+
+    res.json({
+      success: true,
+      data: news,
+      currentPage: pageNum,
+      totalPages: Math.ceil(total.length / limitNum),
+      totalRecords: total.length,
+    });
+  } catch (error) {
+    console.error("Error fetching recent LoweredSN records:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+});
+
 
 router.get("/api/suggestion", async (req, res) => {
   try {
